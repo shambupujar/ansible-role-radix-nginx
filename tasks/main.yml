@@ -1,0 +1,129 @@
+---
+- name: Install nginx and dependencies
+  apt:
+    name:
+      - nginx
+      - apache2-utils
+      - unzip
+      - python3-passlib
+    state: present
+    update_cache: yes
+
+- name: Remove default nginx site configs
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /etc/nginx/sites-available
+    - /etc/nginx/sites-enabled
+
+- name: Create nginx directories
+  file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - "{{ nginx_secrets_dir }}"
+    - "{{ nginx_cache_dir }}"
+
+- name: Check if SSL certificate already exists
+  stat:
+    path: "{{ nginx_secrets_dir }}/server.pem"
+  register: nginx_ssl_cert
+
+- name: Generate self-signed SSL certificate
+  shell: >
+    openssl req -nodes -new -x509
+    -subj '/CN=localhost'
+    -keyout {{ nginx_secrets_dir }}/server.key
+    -out {{ nginx_secrets_dir }}/server.pem
+  when: not nginx_ssl_cert.stat.exists
+
+- name: Download nginx config archive
+  get_url:
+    url: "{{ nginx_config_url }}"
+    dest: /tmp/radixdlt-nginx.zip
+    force: yes
+
+- name: Create temp directory for nginx config
+  file:
+    path: /tmp/radixdlt-nginx
+    state: directory
+
+- name: Extract nginx config archive
+  unarchive:
+    src: /tmp/radixdlt-nginx.zip
+    dest: /tmp/radixdlt-nginx
+    remote_src: yes
+
+- name: Install nginx conf.d files
+  copy:
+    src: /tmp/radixdlt-nginx/conf.d/
+    dest: /etc/nginx/conf.d/
+    remote_src: yes
+  notify:
+    - Restart nginx
+
+- name: Install nginx certs
+  copy:
+    src: /tmp/radixdlt-nginx/certs/
+    dest: /etc/nginx/certs/
+    remote_src: yes
+  notify:
+    - Restart nginx
+
+- name: Install nginx.conf
+  copy:
+    src: "/tmp/radixdlt-nginx/nginx-{{ nginx_node_type }}.conf"
+    dest: /etc/nginx/nginx.conf
+    remote_src: yes
+  notify:
+    - Restart nginx
+
+- name: Patch nginx p2p listen port (stream)
+  replace:
+    path: /etc/nginx/conf.d/coretcpserver.conf
+    regexp: 'listen\s+30000'
+    replace: 'listen {{ radixnode_p2p_broadcast_port }}'
+  notify:
+    - Restart nginx
+
+- name: Patch nginx p2p upstream port
+  replace:
+    path: /etc/nginx/conf.d/coretcpserver.conf
+    regexp: '127\.0\.0\.1:30001'
+    replace: '127.0.0.1:{{ radixnode_p2p_listen_port }}'
+  notify:
+    - Restart nginx
+
+- name: Clean up downloaded files
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /tmp/radixdlt-nginx.zip
+    - /tmp/radixdlt-nginx
+
+- name: Set up htpasswd for admin
+  community.general.htpasswd:
+    path: "{{ nginx_secrets_dir }}/htpasswd.admin"
+    name: "{{ nginx_admin_username }}"
+    password: "{{ nginx_admin_password }}"
+
+- name: Set up htpasswd for metrics
+  community.general.htpasswd:
+    path: "{{ nginx_secrets_dir }}/htpasswd.metrics"
+    name: "{{ nginx_metrics_username }}"
+    password: "{{ nginx_metrics_password }}"
+
+- name: Set up htpasswd for superadmin
+  community.general.htpasswd:
+    path: "{{ nginx_secrets_dir }}/htpasswd.superadmin"
+    name: "{{ nginx_superadmin_username }}"
+    password: "{{ nginx_superadmin_password }}"
+
+- name: Enable and start nginx service
+  systemd:
+    enabled: true
+    name: nginx
+    state: started
+    daemon_reload: true

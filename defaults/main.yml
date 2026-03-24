@@ -1,0 +1,6 @@
+---
+nginx_release: "1.0.9"
+nginx_node_type: "fullnode"
+nginx_config_url: "https://github.com/radixdlt/babylon-nginx/releases/download/{{ nginx_release }}/babylon-nginx-{{ nginx_node_type }}-conf.zip"
+nginx_secrets_dir: "/etc/nginx/secrets"
+nginx_cache_dir: "/var/cache/nginx/radixdlt-hot"
