@@ -2,7 +2,7 @@
 - name: Install nginx and dependencies
   apt:
     name:
-      - nginx
+      - nginx-extras
       - apache2-utils
       - unzip
       - python3-passlib
