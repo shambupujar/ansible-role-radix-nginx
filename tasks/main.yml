@@ -109,6 +109,14 @@
     name: "{{ nginx_admin_username }}"
     password: "{{ nginx_admin_password }}"
 
+- name: Set up htpasswd for extra admin users
+  community.general.htpasswd:
+    path: "{{ nginx_secrets_dir }}/htpasswd.admin"
+    name: "{{ item.username }}"
+    password: "{{ item.password }}"
+  loop: "{{ nginx_extra_admin_users }}"
+  no_log: true
+
 - name: Set up htpasswd for metrics
   community.general.htpasswd:
     path: "{{ nginx_secrets_dir }}/htpasswd.metrics"
